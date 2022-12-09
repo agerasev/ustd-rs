@@ -2,7 +2,6 @@
 
 [![Crates.io][crates_badge]][crates]
 [![Docs.rs][docs_badge]][docs]
-[![Github Actions][github_badge]][github]
 [![License][license_badge]][license]
 
 [crates_badge]: https://img.shields.io/crates/v/ustd.svg

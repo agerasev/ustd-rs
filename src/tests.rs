@@ -44,3 +44,26 @@ fn priority() {
         VAL.fetch_add(1, Ordering::SeqCst);
     }
 }
+
+#[test]
+fn ping_pong() {
+    lazy_static! {
+        static ref ISEM: Semaphore = Semaphore::new();
+        static ref OSEM: Semaphore = Semaphore::new();
+        static ref VAL: AtomicUsize = AtomicUsize::new(0);
+    }
+    const N: usize = 1024;
+    task::spawn(Priority::default(), || {
+        for i in 0..N {
+            ISEM.take();
+            assert_eq!(VAL.fetch_add(1, Ordering::SeqCst), 2 * i);
+            assert!(OSEM.try_give());
+        }
+    });
+    assert!(ISEM.try_give());
+    for i in 0..N {
+        OSEM.take();
+        assert!(ISEM.try_give());
+        assert_eq!(VAL.fetch_add(1, Ordering::SeqCst), 2 * i + 1);
+    }
+}

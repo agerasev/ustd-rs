@@ -4,3 +4,6 @@
 mod std;
 #[cfg(feature = "backend-std")]
 pub use std::*;
+
+#[cfg(test)]
+mod tests;

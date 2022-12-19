@@ -1,29 +1,66 @@
 extern crate std;
 
 use core::time::Duration;
-use std::thread::{self, Thread, ThreadId};
+use std::{
+    cell::Cell,
+    thread::{self, Thread, ThreadId},
+    thread_local,
+};
 
-pub type Priority = usize;
-pub type TaskId = ThreadId;
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub struct TaskId(ThreadId);
 
-pub struct Task {
-    thread: Thread,
+#[derive(Clone, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct Priority(usize);
+
+#[derive(Clone, Copy, Debug)]
+struct TaskInfo {
     priority: Priority,
 }
 
+#[derive(Clone, Debug)]
+pub struct Task {
+    thread: Thread,
+    info: TaskInfo,
+}
+
+thread_local! {
+    static TASK_INFO: Cell<Option<TaskInfo>> = Cell::new(None);
+}
+
 impl Task {
-    pub fn priority(&self) -> Priority {
-        self.priority
-    }
     pub fn id(&self) -> TaskId {
-        self.thread.id()
+        TaskId(self.thread.id())
+    }
+    pub fn priority(&self) -> Priority {
+        self.info.priority
+    }
+    pub(crate) fn thread(&self) -> Thread {
+        self.thread.clone()
     }
 }
 
 pub fn spawn<F: FnOnce() + Send + 'static>(priority: Priority, func: F) -> Task {
+    let info = TaskInfo { priority };
     Task {
-        thread: thread::spawn(func).thread().clone(),
-        priority,
+        thread: thread::spawn(move || {
+            TASK_INFO.with(|this| this.set(Some(info)));
+            func();
+        })
+        .thread()
+        .clone(),
+        info,
+    }
+}
+
+pub fn current() -> Task {
+    Task {
+        thread: thread::current(),
+        info: TASK_INFO
+            .with(|this| this.get())
+            .unwrap_or_else(|| TaskInfo {
+                priority: Priority::default(),
+            }),
     }
 }
 

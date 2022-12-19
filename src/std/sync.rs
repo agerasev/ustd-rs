@@ -1,77 +1,94 @@
 extern crate std;
 
+use crate::task::{self, Task, TaskId};
 use core::time::Duration;
 use std::{
-    mem::replace,
+    collections::HashMap,
     sync::Mutex,
-    thread::{self, Thread},
+    thread::{self, ThreadId},
     time::Instant,
 };
 
-#[derive(Default)]
-struct SemaphoreUnprotected {
-    value: bool,
-    waiter: Option<Thread>,
+#[derive(Clone, Copy, Debug, Default)]
+enum Value {
+    #[default]
+    Down,
+    Up,
+    Unpark(ThreadId),
 }
 
-/// MPSC binary semaphore.
 #[derive(Default)]
+struct SemaphoreUnprotected {
+    value: Value,
+    queue: HashMap<TaskId, Task>,
+}
+
+/// MPMC binary semaphore.
 pub struct Semaphore {
     shared: Mutex<SemaphoreUnprotected>,
 }
 
-#[derive(Clone)]
-pub struct SemaphoreProducer<'a> {
-    shared: &'a Mutex<SemaphoreUnprotected>,
-}
-
-pub struct SemaphoreConsumer<'a> {
-    shared: &'a Mutex<SemaphoreUnprotected>,
+impl Default for Semaphore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Semaphore {
     pub fn new() -> Self {
         Self {
             shared: Mutex::new(SemaphoreUnprotected {
-                value: false,
-                waiter: None,
+                value: Value::Down,
+                queue: HashMap::new(),
             }),
         }
     }
 
-    pub fn split(&mut self) -> (SemaphoreProducer<'_>, SemaphoreConsumer<'_>) {
-        let shared = &self.shared;
-        (SemaphoreProducer { shared }, SemaphoreConsumer { shared })
-    }
-}
-
-impl<'a> SemaphoreProducer<'a> {
     /// Returns `true` on success.
     pub fn try_give(&self) -> bool {
         let mut guard = self.shared.lock().unwrap();
-        let waiter = guard.waiter.take();
-        let value = replace(&mut guard.value, true);
-        drop(guard);
-        if let Some(thread) = waiter {
-            thread.unpark();
+        match guard.value {
+            Value::Down => (),
+            _ => return false,
         }
-        !value
+        match guard
+            .queue
+            .iter()
+            .max_by_key(|(_, v)| v.priority())
+            .map(|(k, _)| *k)
+            .map(|k| guard.queue.remove(&k).unwrap())
+        {
+            Some(task) => {
+                let thread = task.thread();
+                guard.value = Value::Unpark(thread.id());
+                drop(guard);
+                thread.unpark();
+            }
+            None => guard.value = Value::Up,
+        }
+        true
     }
-}
 
-impl<'a> SemaphoreConsumer<'a> {
     /// Returns `true` on success.
-    pub fn try_take(&mut self) -> bool {
-        replace(&mut self.shared.lock().unwrap().value, false)
+    pub fn try_take(&self) -> bool {
+        let mut guard = self.shared.lock().unwrap();
+        if let Value::Up = guard.value {
+            guard.value = Value::Down;
+            true
+        } else {
+            false
+        }
     }
 
-    pub fn take(&mut self) {
+    pub fn take(&self) {
+        let task = task::current();
+
         let mut guard = self.shared.lock().unwrap();
-        if guard.value {
-            guard.value = false;
+        if let Value::Up = guard.value {
+            guard.value = Value::Down;
             return;
         } else {
-            debug_assert!(guard.waiter.replace(thread::current()).is_none());
+            assert!(guard.queue.insert(task.id(), task.clone()).is_none());
         }
         drop(guard);
 
@@ -79,22 +96,30 @@ impl<'a> SemaphoreConsumer<'a> {
             thread::park();
 
             let mut guard = self.shared.lock().unwrap();
-            if guard.value {
-                guard.value = false;
-                debug_assert!(guard.waiter.is_none());
-                break;
+            match guard.value {
+                Value::Up => unreachable!(),
+                Value::Unpark(id) => {
+                    if id == task.thread().id() {
+                        assert!(!guard.queue.contains_key(&task.id()));
+                        guard.value = Value::Down;
+                        break;
+                    }
+                }
+                Value::Down => (),
             }
         }
     }
 
     /// Returns `true` on success, `false` when timed out.
-    pub fn take_timeout(&mut self, timeout: Duration) -> bool {
+    pub fn take_timeout(&self, timeout: Duration) -> bool {
+        let task = task::current();
+
         let mut guard = self.shared.lock().unwrap();
-        if guard.value {
-            guard.value = false;
+        if let Value::Up = guard.value {
+            guard.value = Value::Down;
             return true;
         } else {
-            assert!(guard.waiter.replace(thread::current()).is_none());
+            assert!(guard.queue.insert(task.id(), task.clone()).is_none());
         }
         drop(guard);
 
@@ -105,13 +130,23 @@ impl<'a> SemaphoreConsumer<'a> {
 
             let stop = Instant::now();
             let mut guard = self.shared.lock().unwrap();
-            if replace(&mut guard.value, false) {
-                guard.waiter.take();
-                break true;
-            } else if start + remaining <= stop {
-                guard.waiter.take();
-                break false;
+            match guard.value {
+                Value::Up => unreachable!(),
+                Value::Unpark(id) => {
+                    if id == task.thread().id() {
+                        assert!(!guard.queue.contains_key(&task.id()));
+                        guard.value = Value::Down;
+                        break true;
+                    }
+                }
+                Value::Down => {
+                    if start + remaining <= stop {
+                        assert!(guard.queue.remove(&task.id()).is_some());
+                        break false;
+                    }
+                }
             }
+
             remaining -= stop - start;
         }
     }

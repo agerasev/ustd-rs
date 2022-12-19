@@ -3,6 +3,7 @@ extern crate std;
 use core::time::Duration;
 use std::{
     cell::Cell,
+    ops::{Add, AddAssign},
     thread::{self, Thread, ThreadId},
     thread_local,
 };
@@ -66,4 +67,18 @@ pub fn current() -> Task {
 
 pub fn sleep(dur: Duration) {
     thread::sleep(dur);
+}
+
+impl Add<usize> for Priority {
+    type Output = Self;
+    fn add(mut self, rhs: usize) -> Self::Output {
+        self.0 += rhs;
+        self
+    }
+}
+
+impl AddAssign<usize> for Priority {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs
+    }
 }

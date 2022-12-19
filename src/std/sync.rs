@@ -2,6 +2,7 @@ extern crate std;
 
 use crate::task::{self, Task, TaskId};
 use core::time::Duration;
+use fnv::FnvBuildHasher;
 use std::{
     collections::HashMap,
     sync::Mutex,
@@ -20,7 +21,7 @@ enum Value {
 #[derive(Default)]
 struct SemaphoreUnprotected {
     value: Value,
-    queue: HashMap<TaskId, Task>,
+    queue: HashMap<TaskId, Task, FnvBuildHasher>,
 }
 
 /// MPMC binary semaphore.
@@ -39,7 +40,7 @@ impl Semaphore {
         Self {
             shared: Mutex::new(SemaphoreUnprotected {
                 value: Value::Down,
-                queue: HashMap::new(),
+                queue: HashMap::default(),
             }),
         }
     }

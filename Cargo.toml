@@ -15,7 +15,10 @@ license = "MIT/Apache-2.0"
 
 [features]
 default = ["backend-std"]
-backend-std = []
+backend-std = ["fnv"]
+
+[dependencies]
+fnv = { version = "1.0.7", optional = true, default-features = false }
 
 [dev-dependencies]
 lazy_static = { version = "1.4.0", default-features = false, features = [

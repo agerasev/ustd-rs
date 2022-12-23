@@ -1,9 +1,7 @@
 #![no_std]
 
-#[cfg(feature = "backend-std")]
-mod std;
-#[cfg(feature = "backend-std")]
-pub use std::*;
+mod backend;
+pub use backend::*;
 
 #[cfg(test)]
 mod tests;

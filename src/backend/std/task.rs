@@ -1,5 +1,6 @@
 extern crate std;
 
+use crate::Error;
 use core::time::Duration;
 use std::{
     cell::Cell,
@@ -41,9 +42,9 @@ impl Task {
     }
 }
 
-pub fn spawn<F: FnOnce() + Send + 'static>(priority: Priority, func: F) -> Task {
+pub fn spawn<F: FnOnce() + Send + 'static>(priority: Priority, func: F) -> Result<Task, Error> {
     let info = TaskInfo { priority };
-    Task {
+    Ok(Task {
         thread: thread::spawn(move || {
             TASK_INFO.with(|this| this.set(Some(info)));
             func();
@@ -51,18 +52,18 @@ pub fn spawn<F: FnOnce() + Send + 'static>(priority: Priority, func: F) -> Task 
         .thread()
         .clone(),
         info,
-    }
+    })
 }
 
-pub fn current() -> Task {
-    Task {
+pub fn current() -> Result<Task, Error> {
+    Ok(Task {
         thread: thread::current(),
         info: TASK_INFO
             .with(|this| this.get())
             .unwrap_or_else(|| TaskInfo {
                 priority: Priority::default(),
             }),
-    }
+    })
 }
 
 pub fn sleep(dur: Duration) {

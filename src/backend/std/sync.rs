@@ -1,6 +1,9 @@
 extern crate std;
 
-use crate::task::{self, Task, TaskId};
+use crate::{
+    task::{self, Task, TaskId},
+    Error,
+};
 use core::time::Duration;
 use fnv::FnvBuildHasher;
 use std::{
@@ -29,20 +32,14 @@ pub struct Semaphore {
     shared: Mutex<SemaphoreUnprotected>,
 }
 
-impl Default for Semaphore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Semaphore {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self, Error> {
+        Ok(Self {
             shared: Mutex::new(SemaphoreUnprotected {
                 value: Value::Down,
                 queue: HashMap::default(),
             }),
-        }
+        })
     }
 
     /// Returns `true` on success.
@@ -82,7 +79,7 @@ impl Semaphore {
     }
 
     pub fn take(&self) {
-        let task = task::current();
+        let task = task::current().unwrap();
 
         let mut guard = self.shared.lock().unwrap();
         if let Value::Up = guard.value {
@@ -113,7 +110,7 @@ impl Semaphore {
 
     /// Returns `true` on success, `false` when timed out.
     pub fn take_timeout(&self, timeout: Duration) -> bool {
-        let task = task::current();
+        let task = task::current().unwrap();
 
         let mut guard = self.shared.lock().unwrap();
         if let Value::Up = guard.value {

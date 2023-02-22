@@ -14,18 +14,20 @@ keywords = ["std", "stdlib", "embedded"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["backend-freertos"]
-backend-std = ["fnv"]
-backend-freertos = ["freertos", "freertos-cargo-build"]
+default = ["backend-std"]
+backend-std = ["std"]
+backend-freertos = ["freertos", "lazy_static/spin_no_std"]
+std = ["fnv"]
 
 [dependencies]
 fnv = { version = "1.0.7", optional = true, default-features = false }
-freertos = { package = "freertos-rust", path = "freertos-rust/freertos-rust", optional = true }
 
-[build-dependencies]
-freertos-cargo-build = { path = "freertos-rust/freertos-cargo-build", optional = true }
+[dependencies.freertos]
+package = "freertos-rust"
+path = "../freertos/freertos-rust"
+default-features = false
+features = ["sync", "time", "interrupt"]
+optional = true
 
 [dev-dependencies]
-lazy_static = { version = "1.4.0", default-features = false, features = [
-    "spin_no_std",
-] }
+lazy_static = { version = "1.4.0", default-features = false }

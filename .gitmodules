@@ -1,3 +1,0 @@
-[submodule "freertos-rust"]
-	path = freertos-rust
-	url = git@github.com:agerasev/freertos-rust.git

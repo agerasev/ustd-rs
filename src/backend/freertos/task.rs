@@ -8,14 +8,14 @@ use core::{
 pub struct TaskId(freertos::FreeRtosBaseType);
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct Priority(u8);
+pub struct Priority(pub usize);
 
 impl Priority {
     fn idle() -> Self {
         Priority(0)
     }
     fn to_freertos(self) -> freertos::TaskPriority {
-        freertos::TaskPriority(self.0)
+        freertos::TaskPriority(self.0 as u8)
     }
 }
 
@@ -57,13 +57,13 @@ impl Default for Priority {
 impl Add<usize> for Priority {
     type Output = Self;
     fn add(mut self, rhs: usize) -> Self::Output {
-        self.0 += rhs as u8;
+        self.0 += rhs;
         self
     }
 }
 
 impl AddAssign<usize> for Priority {
     fn add_assign(&mut self, rhs: usize) {
-        self.0 += rhs as u8;
+        self.0 += rhs;
     }
 }

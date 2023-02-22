@@ -13,7 +13,7 @@ use std::{
 pub struct TaskId(ThreadId);
 
 #[derive(Clone, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct Priority(usize);
+pub struct Priority(pub usize);
 
 #[derive(Clone, Copy, Debug)]
 struct TaskInfo {

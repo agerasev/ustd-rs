@@ -7,3 +7,7 @@ pub use self::std::*;
 mod freertos;
 #[cfg(feature = "backend-freertos")]
 pub use self::freertos::*;
+
+pub mod prelude {
+    pub use super::{print, println};
+}

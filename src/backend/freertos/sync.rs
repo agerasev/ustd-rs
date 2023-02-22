@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::{interrupt::InterruptContext, Error};
 use core::time::Duration;
 
 pub struct Semaphore {
@@ -15,6 +15,10 @@ impl Semaphore {
         self.semaphore.give()
     }
 
+    pub fn try_give_from_intr(&self, intr_ctx: &mut InterruptContext) -> bool {
+        self.semaphore.give_from_isr(intr_ctx)
+    }
+
     /// Returns `true` on success.
     pub fn try_take(&self) -> bool {
         match self.semaphore.take(freertos::Duration::zero()) {
@@ -26,6 +30,10 @@ impl Semaphore {
 
     pub fn take(&self) {
         self.semaphore.take(freertos::Duration::infinite()).unwrap()
+    }
+
+    pub fn try_take_from_intr(&self, intr_ctx: &mut InterruptContext) -> bool {
+        self.semaphore.take_from_isr(intr_ctx)
     }
 
     /// Returns `true` on success, `false` when timed out.

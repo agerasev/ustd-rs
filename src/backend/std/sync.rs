@@ -1,6 +1,7 @@
 extern crate std;
 
 use crate::{
+    interrupt::InterruptContext,
     task::{self, Task, TaskId},
     Error,
 };
@@ -67,6 +68,10 @@ impl Semaphore {
         true
     }
 
+    pub fn try_give_from_intr(&self, _intr_ctx: &mut InterruptContext) -> bool {
+        self.try_give()
+    }
+
     /// Returns `true` on success.
     pub fn try_take(&self) -> bool {
         let mut guard = self.shared.lock().unwrap();
@@ -76,6 +81,10 @@ impl Semaphore {
         } else {
             false
         }
+    }
+
+    pub fn try_take_from_intr(&self, _intr_ctx: &mut InterruptContext) -> bool {
+        self.try_take()
     }
 
     pub fn take(&self) {

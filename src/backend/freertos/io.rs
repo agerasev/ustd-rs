@@ -8,7 +8,7 @@ extern "C" {
     static __ustd_io_buffer_size: usize;
     static __ustd_io_buffer: [c_char; 0];
 
-    fn __ustd_io_print_buffer();
+    fn __ustd_print_buffer();
 }
 
 lazy_static! {
@@ -28,7 +28,7 @@ impl GlobalStdout {
         unsafe { from_raw_parts_mut(__ustd_io_buffer.as_ptr() as *mut u8, Self::buffer_len()) }
     }
     fn write_buffer(&mut self) {
-        unsafe { __ustd_io_print_buffer() }
+        unsafe { __ustd_print_buffer() }
     }
 }
 

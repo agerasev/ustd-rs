@@ -13,6 +13,13 @@ categories = ["os", "embedded", "no-std"]
 keywords = ["std", "stdlib", "embedded"]
 license = "MIT/Apache-2.0"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
 [features]
 default = ["backend-freertos"]
 backend-std = ["fnv"]

@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 
 void vApplicationMallocFailedHook( void )
 {
@@ -66,4 +67,8 @@ void vAssertCalled( const char * const pcFileName, unsigned long ulLine )
 
     printf("Assertion failed in '%s' at line %ld\n", pcFileName, ulLine);
     abort();
+}
+
+void vApplicationDaemonTaskStartupHook()
+{
 }

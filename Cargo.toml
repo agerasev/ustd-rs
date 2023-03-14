@@ -16,18 +16,11 @@ license = "MIT/Apache-2.0"
 [lib]
 path = "src/lib.rs"
 
-[[bin]]
-name = "main"
-path = "src/main.rs"
-
 [features]
-default = ["backend-freertos"]
+default = ["backend-std"]
 backend-std = ["std"]
-backend-freertos = [
-    "freertos",
-    "lazy_static/spin_no_std",
-    "freertos-cargo-build",
-]
+backend-freertos = ["freertos", "lazy_static/spin_no_std"]
+test-freertos = ["backend-freertos", "freertos-cargo-build"]
 std = ["fnv"]
 panic = []
 

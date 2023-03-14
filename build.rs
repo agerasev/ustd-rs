@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-#[cfg(feature = "backend-freertos")]
+#[cfg(feature = "test-freertos")]
 fn build_freertos() {
     let mut b = freertos_cargo_build::Builder::new();
 
@@ -16,6 +16,6 @@ fn build_freertos() {
 }
 
 fn main() {
-    #[cfg(all(feature = "backend-freertos", test))]
+    #[cfg(feature = "test-freertos")]
     build_freertos();
 }

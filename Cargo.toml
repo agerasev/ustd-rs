@@ -13,10 +13,21 @@ categories = ["os", "embedded", "no-std"]
 keywords = ["std", "stdlib", "embedded"]
 license = "MIT/Apache-2.0"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
 [features]
-default = ["backend-std"]
+default = ["backend-freertos"]
 backend-std = ["std"]
-backend-freertos = ["freertos", "lazy_static/spin_no_std"]
+backend-freertos = [
+    "freertos",
+    "lazy_static/spin_no_std",
+    "freertos-cargo-build",
+]
 std = ["fnv"]
 panic = []
 
@@ -26,7 +37,10 @@ lazy_static = { version = "1.4.0", default-features = false }
 
 [dependencies.freertos]
 package = "freertos-rust"
-path = "../freertos/freertos-rust"
+path = "freertos-rust/freertos-rust"
 default-features = false
 features = ["sync", "time", "interrupt"]
 optional = true
+
+[build-dependencies]
+freertos-cargo-build = { path = "freertos-rust/freertos-cargo-build", optional = true }

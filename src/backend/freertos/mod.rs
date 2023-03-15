@@ -1,9 +1,9 @@
 mod alloc;
 #[cfg(feature = "panic")]
 mod panic;
+mod utils;
 
 pub mod error;
-pub mod interrupt;
 pub mod io;
 pub mod sync;
 pub mod task;

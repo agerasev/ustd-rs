@@ -1,50 +1,33 @@
-use crate::{interrupt::InterruptContext, Error};
+use super::{task::ISR, utils::IntoFreertos};
+use crate::error::Error;
 use core::time::Duration;
 
-pub struct Semaphore {
-    semaphore: freertos::Semaphore,
-}
+pub struct Semaphore(freertos::Semaphore);
 
 impl Semaphore {
     pub fn new() -> Result<Self, Error> {
-        freertos::Semaphore::new_binary().map(|sem| Self { semaphore: sem })
+        freertos::Semaphore::new_binary().map(Self)
     }
 
-    /// Returns `true` on success.
-    pub fn try_give(&self) -> bool {
-        self.semaphore.give()
-    }
-
-    pub fn try_give_from_intr(&self, intr_ctx: &mut InterruptContext) -> bool {
-        self.semaphore.give_from_isr(intr_ctx)
-    }
-
-    /// Returns `true` on success.
-    pub fn try_take(&self) -> bool {
-        match self.semaphore.take(freertos::Duration::zero()) {
-            Ok(()) => true,
-            Err(Error::Timeout) => false,
-            Err(other) => unreachable!("Unexpected error: {:?}", other),
+    pub fn give(&self) -> bool {
+        match ISR.lock().as_mut() {
+            Some(isr) => self.0.give_from_isr(isr),
+            None => self.0.give(),
         }
     }
 
-    pub fn take(&self) {
-        self.semaphore.take(freertos::Duration::infinite()).unwrap()
-    }
-
-    pub fn try_take_from_intr(&self, intr_ctx: &mut InterruptContext) -> bool {
-        self.semaphore.take_from_isr(intr_ctx)
-    }
-
-    /// Returns `true` on success, `false` when timed out.
-    pub fn take_timeout(&self, timeout: Duration) -> bool {
-        match self
-            .semaphore
-            .take(freertos::Duration::ms(timeout.as_millis() as u32))
-        {
-            Ok(()) => true,
-            Err(Error::Timeout) => false,
-            Err(other) => unreachable!("Unexpected error: {:?}", other),
+    /// Returns `true` on success.
+    pub fn take(&self, timeout: Option<Duration>) -> bool {
+        match ISR.lock().as_mut() {
+            Some(isr) => {
+                assert_eq!(timeout, Some(Duration::ZERO));
+                self.0.take_from_isr(isr)
+            }
+            None => match self.0.take(timeout.into_freertos()) {
+                Ok(()) => true,
+                Err(Error::Timeout) => false,
+                Err(_) => unreachable!(),
+            },
         }
     }
 }

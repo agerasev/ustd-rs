@@ -17,16 +17,17 @@ license = "MIT/Apache-2.0"
 path = "src/lib.rs"
 
 [features]
-default = ["backend-std"]
+default = ["backend-freertos"]
 backend-std = ["std"]
-backend-freertos = ["freertos", "lazy_static/spin_no_std"]
+backend-freertos = ["freertos", "lazy_static/spin_no_std", "spin"]
 test-freertos = ["backend-freertos", "freertos-cargo-build"]
-std = ["fnv"]
+std = []
 panic = []
 
 [dependencies]
-fnv = { version = "1.0.7", optional = true, default-features = false }
 lazy_static = { version = "1.4.0", default-features = false }
+spin = { version = "0.5.2", optional = true }
+thiserror = "1.0.39"
 
 [dependencies.freertos]
 package = "freertos-rust"

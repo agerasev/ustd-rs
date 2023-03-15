@@ -15,21 +15,22 @@ fn spawn() {
         static ref VAL: AtomicBool = AtomicBool::new(false);
     }
 
-    task::spawn(Priority::default(), || {
-        task::sleep(Duration::from_millis(100));
+    task::spawn(|| {
+        task::sleep(Some(Duration::from_millis(100)));
         VAL.store(true, Ordering::SeqCst);
-        assert!(SEM.try_give());
+        assert!(SEM.give());
     })
     .unwrap();
 
-    task::spawn(Priority::default() + 1, || {
-        SEM.take();
+    task::spawn(|| {
+        SEM.take(None);
         assert!(VAL.load(Ordering::SeqCst));
     })
     .unwrap();
 }
 
 #[test]
+//#[cfg(feature = "backend-freertos")]
 fn priority() {
     lazy_static! {
         static ref SEM: Semaphore = Semaphore::new().unwrap();
@@ -38,23 +39,27 @@ fn priority() {
     const COUNT: usize = 5;
 
     for i in (0..COUNT).rev() {
-        task::spawn(Priority::default() + i, move || {
-            SEM.take();
-            assert_eq!(VAL.load(Ordering::SeqCst), i);
-        })
-        .unwrap();
+        task::Builder::new()
+            .priority(i as Priority)
+            .spawn(move || {
+                SEM.take(None);
+                assert_eq!(VAL.load(Ordering::SeqCst), i);
+            })
+            .unwrap();
     }
 
-    task::spawn(Priority::default() + COUNT, move || {
-        task::sleep(Duration::from_millis(100));
-        for _ in 0..COUNT {
-            while !SEM.try_give() {
-                task::sleep(Duration::from_micros(100));
+    task::Builder::new()
+        .priority(COUNT as Priority)
+        .spawn(move || {
+            task::sleep(Some(Duration::from_millis(100)));
+            for _ in 0..COUNT {
+                while !SEM.give() {
+                    task::sleep(Some(Duration::from_micros(100)));
+                }
+                VAL.fetch_add(1, Ordering::SeqCst);
             }
-            VAL.fetch_add(1, Ordering::SeqCst);
-        }
-    })
-    .unwrap();
+        })
+        .unwrap();
 }
 
 #[test]
@@ -66,20 +71,20 @@ fn ping_pong() {
     }
     const N: usize = 1024;
 
-    task::spawn(Priority::default(), || {
+    task::spawn(|| {
         for i in 0..N {
-            ISEM.take();
+            ISEM.take(None);
             assert_eq!(VAL.fetch_add(1, Ordering::SeqCst), 2 * i);
-            assert!(OSEM.try_give());
+            assert!(OSEM.give());
         }
     })
     .unwrap();
 
-    task::spawn(Priority::default() + 1, move || {
-        assert!(ISEM.try_give());
+    task::spawn(move || {
+        assert!(ISEM.give());
         for i in 0..N {
-            OSEM.take();
-            assert!(ISEM.try_give());
+            OSEM.take(None);
+            assert!(ISEM.give());
             assert_eq!(VAL.fetch_add(1, Ordering::SeqCst), 2 * i + 1);
         }
     })

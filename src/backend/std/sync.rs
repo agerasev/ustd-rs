@@ -1,160 +1,55 @@
 extern crate std;
 
-use crate::{
-    interrupt::InterruptContext,
-    task::{self, Task, TaskId},
-    Error,
-};
-use core::time::Duration;
-use fnv::FnvBuildHasher;
+use super::task::is_interrupt;
+use crate::error::Error;
+use core::{mem::replace, time::Duration};
 use std::{
-    collections::HashMap,
-    sync::Mutex,
-    thread::{self, ThreadId},
+    sync::{Condvar, Mutex},
     time::Instant,
 };
 
-#[derive(Clone, Copy, Debug, Default)]
-enum Value {
-    #[default]
-    Down,
-    Up,
-    Unpark(ThreadId),
-}
-
-#[derive(Default)]
-struct SemaphoreUnprotected {
-    value: Value,
-    queue: HashMap<TaskId, Task, FnvBuildHasher>,
-}
-
 /// MPMC binary semaphore.
-pub struct Semaphore {
-    shared: Mutex<SemaphoreUnprotected>,
+pub(crate) struct Semaphore {
+    value: Mutex<bool>,
+    condvar: Condvar,
 }
 
 impl Semaphore {
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
-            shared: Mutex::new(SemaphoreUnprotected {
-                value: Value::Down,
-                queue: HashMap::default(),
-            }),
+            value: Mutex::new(false),
+            condvar: Condvar::new(),
         })
     }
 
-    /// Returns `true` on success.
-    pub fn try_give(&self) -> bool {
-        let mut guard = self.shared.lock().unwrap();
-        match guard.value {
-            Value::Down => (),
-            _ => return false,
-        }
-        match guard
-            .queue
-            .iter()
-            .max_by_key(|(_, v)| v.priority())
-            .map(|(k, _)| *k)
-            .map(|k| guard.queue.remove(&k).unwrap())
-        {
-            Some(task) => {
-                let thread = task.thread();
-                guard.value = Value::Unpark(thread.id());
-                drop(guard);
-                thread.unpark();
-            }
-            None => guard.value = Value::Up,
-        }
-        true
+    pub fn give(&self) -> bool {
+        let mut guard = self.value.lock().unwrap();
+        let prev = replace(&mut *guard, true);
+        self.condvar.notify_one();
+        !prev
     }
 
-    pub fn try_give_from_intr(&self, _intr_ctx: &mut InterruptContext) -> bool {
-        self.try_give()
-    }
-
-    /// Returns `true` on success.
-    pub fn try_take(&self) -> bool {
-        let mut guard = self.shared.lock().unwrap();
-        if let Value::Up = guard.value {
-            guard.value = Value::Down;
-            true
-        } else {
-            false
+    pub fn take(&self, timeout: Option<Duration>) -> bool {
+        if is_interrupt() {
+            assert_eq!(timeout, Some(Duration::ZERO))
         }
-    }
-
-    pub fn try_take_from_intr(&self, _intr_ctx: &mut InterruptContext) -> bool {
-        self.try_take()
-    }
-
-    pub fn take(&self) {
-        let task = task::current().unwrap();
-
-        let mut guard = self.shared.lock().unwrap();
-        if let Value::Up = guard.value {
-            guard.value = Value::Down;
-            return;
-        } else {
-            assert!(guard.queue.insert(task.id(), task.clone()).is_none());
-        }
-        drop(guard);
-
+        let mut guard_slot = Some(self.value.lock().unwrap());
+        let instant = Instant::now();
         loop {
-            thread::park();
-
-            let mut guard = self.shared.lock().unwrap();
-            match guard.value {
-                Value::Up => unreachable!(),
-                Value::Unpark(id) => {
-                    if id == task.thread().id() {
-                        assert!(!guard.queue.contains_key(&task.id()));
-                        guard.value = Value::Down;
-                        break;
-                    }
-                }
-                Value::Down => (),
+            let mut guard = guard_slot.take().unwrap();
+            if replace(&mut *guard, false) {
+                break true;
             }
-        }
-    }
-
-    /// Returns `true` on success, `false` when timed out.
-    pub fn take_timeout(&self, timeout: Duration) -> bool {
-        let task = task::current().unwrap();
-
-        let mut guard = self.shared.lock().unwrap();
-        if let Value::Up = guard.value {
-            guard.value = Value::Down;
-            return true;
-        } else {
-            assert!(guard.queue.insert(task.id(), task.clone()).is_none());
-        }
-        drop(guard);
-
-        let mut remaining = timeout;
-        loop {
-            let start = Instant::now();
-            thread::park_timeout(remaining);
-
-            let stop = Instant::now();
-            let mut guard = self.shared.lock().unwrap();
-            match guard.value {
-                Value::Up => unreachable!(),
-                Value::Unpark(id) => {
-                    if id == task.thread().id() {
-                        assert!(!guard.queue.contains_key(&task.id()));
-                        guard.value = Value::Down;
-                        break true;
-                    }
-                }
-                Value::Down => {
-                    if start + remaining <= stop {
-                        assert!(guard.queue.remove(&task.id()).is_some());
+            guard_slot.replace(match timeout {
+                Some(total) => {
+                    let current = instant.elapsed();
+                    if current >= total {
                         break false;
                     }
+                    self.condvar.wait_timeout(guard, total - current).unwrap().0
                 }
-            }
-
-            remaining -= stop - start;
+                None => self.condvar.wait(guard).unwrap(),
+            });
         }
     }
 }

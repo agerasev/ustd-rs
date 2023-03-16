@@ -6,11 +6,7 @@ pub use freertos;
 mod backend;
 pub use backend::*;
 
-pub mod task;
-
-pub use io::{print, println};
 pub mod prelude {
-    pub use super::io::{print, println};
     pub use super::task::{BlockingContext, Context};
 }
 

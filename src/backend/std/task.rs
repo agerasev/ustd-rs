@@ -1,9 +1,6 @@
 extern crate std;
 
-use crate::{
-    error::Error,
-    task::{BlockingContext, Context, Priority},
-};
+use crate::error::Error;
 use core::{cell::Cell, marker::PhantomData, time::Duration};
 use std::{
     sync::{Arc, Condvar, Mutex},
@@ -12,8 +9,19 @@ use std::{
     time::Instant,
 };
 
+/// Basic execution context.
+pub trait Context {}
+
+/// Context that allows to make blocking calls.
+pub trait BlockingContext: Context {
+    fn sleep(&mut self, duration: Option<Duration>);
+}
+
 /// Unique task identifier.
 pub type TaskId = ThreadId;
+
+/// Task priority.
+pub type Priority = usize;
 
 #[derive(Default)]
 struct State {
@@ -201,4 +209,9 @@ impl Builder {
             state,
         })
     }
+}
+
+/// Spawn a new task.
+pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(func: F) -> Result<Handle, Error> {
+    Builder::new().spawn(func)
 }

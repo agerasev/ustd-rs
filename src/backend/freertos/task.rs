@@ -1,18 +1,27 @@
 extern crate alloc;
 
-use super::utils::IntoFreertos;
-use crate::{error::Error, task::Priority};
+use super::{
+    sync::{SemaphoreBlockingContext, SemaphoreContext},
+    utils::IntoFreertos,
+};
+use crate::error::Error;
 use alloc::sync::Arc;
-use core::time::Duration;
+use core::{marker::PhantomData, time::Duration};
 use freertos::FreeRtosTaskHandle;
-use lazy_static::lazy_static;
-use spin::Mutex as Spin;
+
+pub trait Context: SemaphoreContext {}
+
+pub trait BlockingContext: Context + SemaphoreBlockingContext {
+    fn sleep(&mut self, duration: Option<Duration>);
+}
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
-pub(crate) struct TaskId(FreeRtosTaskHandle);
+pub struct TaskId(FreeRtosTaskHandle);
+
+pub type Priority = u8;
 
 #[derive(Clone, Debug)]
-pub(crate) struct Task(freertos::Task);
+pub struct Task(freertos::Task);
 
 impl Task {
     pub fn id(&self) -> TaskId {
@@ -20,16 +29,23 @@ impl Task {
     }
 }
 
-pub(crate) struct Handle {
+pub struct Handle {
     task: freertos::Task,
     done: Arc<freertos::Semaphore>,
+}
+
+pub struct TaskContext {
+    task: freertos::Task,
+    done: Arc<freertos::Semaphore>,
+    /// To ensure `!Sync + !Send`
+    _p: PhantomData<*const ()>,
 }
 
 impl Handle {
     pub fn task(&self) -> Task {
         Task(self.task.clone())
     }
-    pub fn join(&self, timeout: Option<Duration>) -> bool {
+    pub fn join<C: BlockingContext>(&self, _cx: &mut C, timeout: Option<Duration>) -> bool {
         let done = self.done.take(timeout.into_freertos()).is_ok();
         if done {
             self.done.give();
@@ -38,7 +54,37 @@ impl Handle {
     }
 }
 
-pub(crate) struct Builder(freertos::TaskBuilder);
+impl TaskContext {
+    pub fn task(&mut self) -> Task {
+        Task(self.task.clone())
+    }
+}
+
+impl Context for TaskContext {}
+
+impl BlockingContext for TaskContext {
+    fn sleep(&mut self, duration: Option<Duration>) {
+        freertos::CurrentTask::delay(duration.into_freertos())
+    }
+}
+
+pub struct InterruptContext {
+    pub(crate) inner: freertos::InterruptContext,
+    /// To ensure `!Sync + !Send`
+    _p: PhantomData<*const ()>,
+}
+
+impl InterruptContext {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self {
+            inner: freertos::InterruptContext::new(),
+            _p: PhantomData,
+        }
+    }
+}
+
+pub struct Builder(freertos::TaskBuilder);
 
 impl Builder {
     #[allow(clippy::new_without_default)]
@@ -58,47 +104,28 @@ impl Builder {
         self.0.priority(freertos::TaskPriority(priority));
         self
     }
-    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Handle, Error> {
+    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(
+        self,
+        func: F,
+    ) -> Result<Handle, Error> {
         let done = Arc::new(freertos::Semaphore::new_binary().unwrap());
         self.0
             .start({
                 let done = done.clone();
-                move |_task| {
-                    func();
-                    done.give();
+                move |task| {
+                    let mut cx = TaskContext {
+                        task,
+                        done,
+                        _p: PhantomData,
+                    };
+                    func(&mut cx);
+                    cx.done.give();
                 }
             })
             .map(|task| Handle { task, done })
     }
 }
 
-pub(crate) fn current() -> Task {
-    Task(freertos::Task::current().unwrap())
-}
-
-pub(crate) fn sleep(duration: Option<Duration>) {
-    freertos::CurrentTask::delay(duration.into_freertos())
-}
-
-lazy_static! {
-    pub(crate) static ref ISR: Spin<Option<freertos::InterruptContext>> = Spin::new(None);
-}
-
-pub(crate) struct Interrupt {
-    _unused: [u8; 0],
-}
-
-impl Interrupt {
-    pub fn new() -> Self {
-        let mut guard = ISR.lock();
-        assert!(guard.is_none());
-        guard.replace(freertos::InterruptContext::new());
-        Self { _unused: [] }
-    }
-}
-
-impl Drop for Interrupt {
-    fn drop(&mut self) {
-        drop(ISR.lock().take().unwrap());
-    }
+pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(func: F) -> Result<Handle, Error> {
+    Builder::new().spawn(func)
 }

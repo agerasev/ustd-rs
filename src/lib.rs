@@ -3,15 +3,16 @@
 #[cfg(feature = "backend-freertos")]
 pub use freertos;
 
-pub mod backend;
+mod backend;
+pub use backend::*;
 
-pub mod context;
-pub mod error;
-pub mod io;
-pub mod sync;
 pub mod task;
 
 pub use io::{print, println};
+pub mod prelude {
+    pub use super::io::{print, println};
+    pub use super::task::{BlockingContext, Context};
+}
 
 #[cfg(any(test, feature = "test-freertos"))]
 pub mod tests;

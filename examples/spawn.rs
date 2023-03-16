@@ -1,18 +1,18 @@
 use core::time::Duration;
 use macro_rules_attribute::apply;
-use ustd::task;
+use ustd::prelude::*;
 
 #[apply(ustd::main)]
-fn main() {
-    println!("Main task: {:?}", task::current().id(),);
-    task::sleep(Some(Duration::from_millis(100)));
-    let handle = task::Builder::new()
+fn main(cx: &mut ustd::task::TaskContext) {
+    println!("Main task: {:?}", cx.task().id(),);
+    cx.sleep(Some(Duration::from_millis(100)));
+    let handle = ustd::task::Builder::new()
         .priority(2)
-        .spawn(|| {
-            println!("Spawned task (inside): {:?}", task::current().id(),);
+        .spawn(|cx| {
+            println!("Spawned task (inside): {:?}", cx.task().id(),);
         })
         .unwrap();
     println!("Spawned task (outside): {:?}", handle.task().id(),);
 
-    handle.join(None);
+    handle.join(cx, None);
 }

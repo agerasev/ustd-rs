@@ -1,13 +1,14 @@
 /// Entry point of ustd program.
 #[macro_export]
 macro_rules! main {
-    (fn main() $body:block) => {
+    (fn main($cx:ident: $cx_ty:ty) $body:block) => {
         fn main() {
-            let enter = $crate::backend::task::enter();
+            let mut __cx = $crate::task::TaskContext::enter();
+            let $cx: $cx_ty = &mut __cx;
             {
                 $body
             }
-            drop(enter);
+            drop(__cx);
         }
     };
 }
@@ -15,14 +16,15 @@ macro_rules! main {
 /// Run test in ustd environment.
 #[macro_export]
 macro_rules! test {
-    (fn $name:ident() $body:block) => {
+    (fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
         #[test]
         fn $name() {
-            let enter = $crate::backend::task::enter();
+            let mut __cx = $crate::task::TaskContext::enter();
+            let $cx: $cx_ty = &mut __cx;
             {
                 $body
             }
-            drop(enter);
+            drop(__cx);
         }
     };
 }

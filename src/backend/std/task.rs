@@ -1,16 +1,19 @@
 extern crate std;
 
-use crate::{error::Error, task::Priority};
-use core::time::Duration;
+use crate::{
+    error::Error,
+    task::{BlockingContext, Context, Priority},
+};
+use core::{cell::Cell, marker::PhantomData, time::Duration};
 use std::{
-    cell::RefCell,
     sync::{Arc, Condvar, Mutex},
     thread::{self, Thread, ThreadId},
     thread_local,
     time::Instant,
 };
 
-pub(crate) type TaskId = ThreadId;
+/// Unique task identifier.
+pub type TaskId = ThreadId;
 
 #[derive(Default)]
 struct State {
@@ -25,7 +28,7 @@ impl State {
         *guard = true;
         self.condvar.notify_all();
     }
-    fn wait_finish(&self, timeout: Option<Duration>) -> bool {
+    fn wait_finished(&self, timeout: Option<Duration>) -> bool {
         let mut guard_slot = Some(self.finished.lock().unwrap());
         let instant = Instant::now();
         loop {
@@ -47,32 +50,41 @@ impl State {
     }
 }
 
+/// Unit of execution.
+///
+/// Internally the same as [`std::thread::Thread`].
 #[derive(Clone)]
-pub(crate) struct Task {
+pub struct Task {
     thread: Thread,
 }
 
-pub(crate) struct Handle {
+impl From<Thread> for Task {
+    fn from(thread: Thread) -> Self {
+        Self { thread }
+    }
+}
+
+/// Task handle.
+pub struct Handle {
     task: Task,
     state: Arc<State>,
 }
 
-pub(crate) struct Local {
+/// Context inside task.
+pub struct TaskContext {
+    task: Task,
     state: Arc<State>,
-    interrupt: bool,
-}
-
-thread_local! {
-    static LOCAL: RefCell<Option<Local>> = RefCell::new(None);
-}
-
-pub(crate) fn is_interrupt() -> bool {
-    LOCAL.with(|this| this.borrow().as_ref().unwrap().interrupt)
+    /// To ensure `!Sync + !Send`
+    _p: PhantomData<*const ()>,
 }
 
 impl Task {
+    /// Task unique identifier.
     pub fn id(&self) -> TaskId {
         self.thread.id()
+    }
+    pub fn thread(&self) -> Thread {
+        self.thread.clone()
     }
 }
 
@@ -80,16 +92,72 @@ impl Handle {
     pub fn task(&self) -> Task {
         self.task.clone()
     }
-    pub fn join(&self, timeout: Option<Duration>) -> bool {
-        self.state.wait_finish(timeout)
+    /// Wait for task to finish.
+    pub fn join<C: BlockingContext>(&self, _cx: &mut C, timeout: Option<Duration>) -> bool {
+        self.state.wait_finished(timeout)
     }
 }
 
-pub(crate) struct Builder {
+thread_local! {
+    static HAS_CONTEXT: Cell<bool> = Cell::new(false);
+}
+
+impl TaskContext {
+    fn new(task: Task, state: Arc<State>) -> Self {
+        HAS_CONTEXT.with(|x| assert!(!x.replace(true)));
+        Self {
+            task,
+            state,
+            _p: PhantomData,
+        }
+    }
+    /// Create a new context for current task.
+    ///
+    /// Panics if context for the task already exists.
+    pub fn enter() -> Self {
+        Self::new(thread::current().into(), Arc::new(State::default()))
+    }
+
+    pub fn task(&self) -> Task {
+        self.task.clone()
+    }
+}
+
+impl Drop for TaskContext {
+    fn drop(&mut self) {
+        HAS_CONTEXT.with(|x| assert!(x.replace(false)));
+    }
+}
+
+impl Context for TaskContext {}
+
+impl BlockingContext for TaskContext {
+    /// Sleep for specified `duration`.
+    ///
+    /// If `None` then sleep infinetely.
+    fn sleep(&mut self, duration: Option<Duration>) {
+        match duration {
+            Some(t) => thread::sleep(t),
+            None => loop {
+                thread::park();
+            },
+        }
+    }
+}
+
+/// Context inside interrupt.
+#[derive(Default)]
+pub struct InterruptContext {
+    /// To ensure `!Sync + !Send`
+    _p: PhantomData<*const ()>,
+}
+
+pub struct Builder {
     inner: thread::Builder,
 }
 
 impl Builder {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             inner: thread::Builder::new(),
@@ -112,15 +180,18 @@ impl Builder {
         // nothing to do
         self
     }
-    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Handle, Error> {
+    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(
+        self,
+        func: F,
+    ) -> Result<Handle, Error> {
         let state = Arc::new(State::default());
         let thread = {
             let state = state.clone();
             self.inner
                 .spawn(move || {
-                    let enter = Enter::new(state.clone());
-                    func();
-                    drop(enter);
+                    let mut cx = TaskContext::new(thread::current().into(), state);
+                    func(&mut cx);
+                    cx.state.finish();
                 })?
                 .thread()
                 .clone()
@@ -129,77 +200,5 @@ impl Builder {
             task: Task { thread },
             state,
         })
-    }
-}
-
-pub struct Enter {
-    _unused: [u8; 0],
-}
-
-impl Enter {
-    fn new(state: Arc<State>) -> Self {
-        LOCAL.with(|this| {
-            this.borrow_mut().replace(Local {
-                interrupt: false,
-                state,
-            })
-        });
-        Self { _unused: [] }
-    }
-}
-
-impl Drop for Enter {
-    fn drop(&mut self) {
-        LOCAL.with(|this| {
-            this.borrow_mut().as_ref().unwrap().state.finish();
-        });
-    }
-}
-
-/// Make the current thread a task.
-pub fn enter() -> Enter {
-    Enter::new(Arc::new(State::default()))
-}
-
-pub(crate) fn current() -> Task {
-    Task {
-        thread: thread::current(),
-    }
-}
-
-pub(crate) fn sleep(duration: Option<Duration>) {
-    match duration {
-        Some(t) => thread::sleep(t),
-        None => loop {
-            thread::park();
-        },
-    }
-}
-
-pub(crate) struct Interrupt {
-    _unused: [u8; 0],
-}
-
-impl Interrupt {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        LOCAL.with(|this| {
-            let mut ref_ = this.borrow_mut();
-            let local = ref_.as_mut().unwrap();
-            assert!(!local.interrupt);
-            local.interrupt = true;
-        });
-        Self { _unused: [] }
-    }
-}
-
-impl Drop for Interrupt {
-    fn drop(&mut self) {
-        LOCAL.with(|this| {
-            let mut ref_ = this.borrow_mut();
-            let local = ref_.as_mut().unwrap();
-            assert!(local.interrupt);
-            local.interrupt = false;
-        });
     }
 }

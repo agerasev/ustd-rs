@@ -1,20 +1,23 @@
 extern crate std;
 
-use super::task::is_interrupt;
-use crate::error::Error;
+use crate::{
+    error::Error,
+    task::{BlockingContext, Context},
+};
 use core::{mem::replace, time::Duration};
 use std::{
     sync::{Condvar, Mutex},
     time::Instant,
 };
 
-/// MPMC binary semaphore.
-pub(crate) struct Semaphore {
+/// Binary semaphore.
+pub struct Semaphore {
     value: Mutex<bool>,
     condvar: Condvar,
 }
 
 impl Semaphore {
+    /// Create semaphore in empty state.
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
             value: Mutex::new(false),
@@ -22,17 +25,29 @@ impl Semaphore {
         })
     }
 
-    pub fn give(&self) -> bool {
+    /// Try to release semaphore.
+    ///
+    /// Returns `true` on success, `false` when already released.
+    pub fn try_give<C: Context>(&self, _cx: &mut C) -> bool {
         let mut guard = self.value.lock().unwrap();
         let prev = replace(&mut *guard, true);
         self.condvar.notify_one();
         !prev
     }
 
-    pub fn take(&self, timeout: Option<Duration>) -> bool {
-        if is_interrupt() {
-            assert_eq!(timeout, Some(Duration::ZERO))
-        }
+    /// Try to acquire semaphore.
+    ///
+    /// Returns `true` on success, `false` when already acquired.
+    pub fn try_take<C: Context>(&self, _cx: &mut C) -> bool {
+        replace(&mut *self.value.lock().unwrap(), false)
+    }
+
+    /// Acquire semaphore.
+    ///
+    /// When `timeout` is `None` then wait infinitely.
+    ///
+    /// Returns `true` on success, `false` when timed out.
+    pub fn take<C: BlockingContext>(&self, _cx: &mut C, timeout: Option<Duration>) -> bool {
         let mut guard_slot = Some(self.value.lock().unwrap());
         let instant = Instant::now();
         loop {

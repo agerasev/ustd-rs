@@ -1,4 +1,9 @@
-use crate::{io::println, sync::Semaphore, task, test};
+use crate::{
+    io::println,
+    sync::Semaphore,
+    task::{self, BlockingContext, TaskContext},
+    test,
+};
 use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::Duration,
@@ -7,35 +12,35 @@ use lazy_static::lazy_static;
 use macro_rules_attribute::apply;
 
 #[apply(test)]
-fn spawn() {
+fn spawn(cx: &mut TaskContext) {
     lazy_static! {
         static ref SEM: Semaphore = Semaphore::new().unwrap();
         static ref VAL: AtomicBool = AtomicBool::new(false);
     }
 
     println!("spawn");
-    let task = task::spawn(|| {
+    let task = task::spawn(|cx| {
         println!("task sleep");
-        task::sleep(Some(Duration::from_millis(100)));
+        cx.sleep(Some(Duration::from_millis(100)));
         VAL.store(true, Ordering::SeqCst);
         println!("task give");
-        assert!(SEM.give());
-        println!("task donw");
+        assert!(SEM.try_give(cx));
+        println!("task done");
     })
     .unwrap();
 
     println!("take");
-    SEM.take(None);
+    SEM.take(cx, None);
     assert!(VAL.load(Ordering::SeqCst));
 
     println!("join");
-    task.join(None);
+    task.join(cx, None);
 
     println!("done");
 }
 
 #[apply(test)]
-fn priority() {
+fn priority(cx: &mut TaskContext) {
     use crate::task::Priority;
 
     lazy_static! {
@@ -47,8 +52,8 @@ fn priority() {
     for i in (0..COUNT).rev() {
         task::Builder::new()
             .priority(i as Priority)
-            .spawn(move || {
-                SEM.take(None);
+            .spawn(move |cx| {
+                SEM.take(cx, None);
                 assert_eq!(VAL.load(Ordering::SeqCst), i);
             })
             .unwrap();
@@ -56,20 +61,21 @@ fn priority() {
 
     task::Builder::new()
         .priority(COUNT as Priority)
-        .spawn(move || {
-            task::sleep(Some(Duration::from_millis(100)));
+        .spawn(move |cx| {
+            cx.sleep(Some(Duration::from_millis(100)));
             for _ in 0..COUNT {
-                while !SEM.give() {
-                    task::sleep(Some(Duration::from_micros(100)));
+                while !SEM.try_give(cx) {
+                    cx.sleep(Some(Duration::from_micros(100)));
                 }
                 VAL.fetch_add(1, Ordering::SeqCst);
             }
         })
-        .unwrap();
+        .unwrap()
+        .join(cx, None);
 }
 
 #[apply(test)]
-fn ping_pong() {
+fn ping_pong(cx: &mut TaskContext) {
     lazy_static! {
         static ref ISEM: Semaphore = Semaphore::new().unwrap();
         static ref OSEM: Semaphore = Semaphore::new().unwrap();
@@ -78,26 +84,26 @@ fn ping_pong() {
     const N: usize = 1024;
 
     let prod = task::Builder::new()
-        .spawn(|| {
+        .spawn(|cx| {
             for i in 0..N {
-                assert!(ISEM.take(None));
+                assert!(ISEM.take(cx, None));
                 assert_eq!(VAL.fetch_add(1, Ordering::SeqCst), 2 * i);
-                assert!(OSEM.give());
+                assert!(OSEM.try_give(cx));
             }
         })
         .unwrap();
 
     let cons = task::Builder::new()
-        .spawn(move || {
-            assert!(ISEM.give());
+        .spawn(move |cx| {
+            assert!(ISEM.try_give(cx));
             for i in 0..N {
-                assert!(OSEM.take(None));
+                assert!(OSEM.take(cx, None));
                 assert_eq!(VAL.fetch_add(1, Ordering::SeqCst), 2 * i + 1);
-                assert!(ISEM.give());
+                assert!(ISEM.try_give(cx));
             }
         })
         .unwrap();
 
-    prod.join(None);
-    cons.join(None);
+    prod.join(cx, None);
+    cons.join(cx, None);
 }

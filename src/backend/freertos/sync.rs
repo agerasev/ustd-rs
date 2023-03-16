@@ -10,24 +10,22 @@ impl Semaphore {
     }
 
     pub fn give(&self) -> bool {
-        match ISR.lock().as_mut() {
-            Some(isr) => self.0.give_from_isr(isr),
-            None => self.0.give(),
+        if let Some(isr) = ISR.lock().as_mut() {
+            return self.0.give_from_isr(isr);
         }
+        self.0.give()
     }
 
     /// Returns `true` on success.
     pub fn take(&self, timeout: Option<Duration>) -> bool {
-        match ISR.lock().as_mut() {
-            Some(isr) => {
-                assert_eq!(timeout, Some(Duration::ZERO));
-                self.0.take_from_isr(isr)
-            }
-            None => match self.0.take(timeout.into_freertos()) {
-                Ok(()) => true,
-                Err(Error::Timeout) => false,
-                Err(_) => unreachable!(),
-            },
+        if let Some(isr) = ISR.lock().as_mut() {
+            assert_eq!(timeout, Some(Duration::ZERO));
+            return self.0.take_from_isr(isr);
+        }
+        match self.0.take(timeout.into_freertos()) {
+            Ok(()) => true,
+            Err(Error::Timeout) => false,
+            Err(_) => unreachable!(),
         }
     }
 }

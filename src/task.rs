@@ -18,6 +18,19 @@ impl Task {
     }
 }
 
+/// Task handle.
+pub struct Handle(backend::Handle);
+
+impl Handle {
+    pub fn task(&self) -> Task {
+        Task(self.0.task())
+    }
+    /// Wait for task to finish.
+    pub fn join(&self, timeout: Option<Duration>) -> bool {
+        self.0.join(timeout)
+    }
+}
+
 /// Task builder.
 pub struct Builder(backend::Builder);
 
@@ -35,19 +48,21 @@ impl Builder {
     pub fn priority(self, priority: Priority) -> Self {
         Self(self.0.priority(priority))
     }
-    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Task, Error> {
-        self.0.spawn(func).map(Task)
+    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Handle, Error> {
+        self.0.spawn(func).map(Handle)
     }
 }
 
 /// Spawn a new task.
-pub fn spawn<F: FnOnce() + Send + 'static>(func: F) -> Result<Task, Error> {
+pub fn spawn<F: FnOnce() + Send + 'static>(func: F) -> Result<Handle, Error> {
     Builder::new().spawn(func)
 }
 
 /// Get current task.
 ///
 /// *Panics if called in ISR.*
+///
+/// *Allowed to call in execution units created only by [`spawn`], [`Builder::spawn`], `#[ustd::main]` or `#[ustd::test]`.*
 pub fn current() -> Task {
     Task(backend::current())
 }

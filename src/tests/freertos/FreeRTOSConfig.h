@@ -74,7 +74,7 @@
 /* Run time stats gathering configuration options. */
 unsigned long ulGetRunTimeCounterValue( void ); /* Prototype of function that returns run time counter. */
 void vConfigureTimerForRunTimeStats( void );    /* Prototype of function that initialises the run time counter. */
-#define configGENERATE_RUN_TIME_STATS             1
+#define configGENERATE_RUN_TIME_STATS             0
 
 /* This demo can use of one or more example stats formatting functions.  These
  * format the raw data provided by the uxTaskGetSystemState() function in to human

@@ -4,25 +4,61 @@ use crate::{error::Error, task::Priority};
 use core::time::Duration;
 use std::{
     cell::RefCell,
+    sync::{Arc, Condvar, Mutex},
     thread::{self, Thread, ThreadId},
     thread_local,
+    time::Instant,
 };
 
 pub(crate) type TaskId = ThreadId;
 
-#[derive(Clone, Copy, Default, Debug)]
-pub(crate) struct Info {
-    priority: Priority,
+#[derive(Default)]
+struct State {
+    condvar: Condvar,
+    finished: Mutex<bool>,
 }
 
-#[derive(Clone, Debug)]
+impl State {
+    fn finish(&self) {
+        let mut guard = self.finished.lock().unwrap();
+        assert!(!*guard);
+        *guard = true;
+        self.condvar.notify_all();
+    }
+    fn wait_finish(&self, timeout: Option<Duration>) -> bool {
+        let mut guard_slot = Some(self.finished.lock().unwrap());
+        let instant = Instant::now();
+        loop {
+            let guard = guard_slot.take().unwrap();
+            if *guard {
+                break true;
+            }
+            guard_slot.replace(match timeout {
+                Some(total) => {
+                    let current = instant.elapsed();
+                    if current >= total {
+                        break false;
+                    }
+                    self.condvar.wait_timeout(guard, total - current).unwrap().0
+                }
+                None => self.condvar.wait(guard).unwrap(),
+            });
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct Task {
     thread: Thread,
-    info: Info,
+}
+
+pub(crate) struct Handle {
+    task: Task,
+    state: Arc<State>,
 }
 
 pub(crate) struct Local {
-    info: Info,
+    state: Arc<State>,
     interrupt: bool,
 }
 
@@ -40,23 +76,29 @@ impl Task {
     }
 }
 
+impl Handle {
+    pub fn task(&self) -> Task {
+        self.task.clone()
+    }
+    pub fn join(&self, timeout: Option<Duration>) -> bool {
+        self.state.wait_finish(timeout)
+    }
+}
+
 pub(crate) struct Builder {
     inner: thread::Builder,
-    info: Info,
 }
 
 impl Builder {
     pub fn new() -> Self {
         Self {
             inner: thread::Builder::new(),
-            info: Info::default(),
         }
     }
 
     fn map<F: FnOnce(thread::Builder) -> thread::Builder>(self, f: F) -> Self {
         Self {
             inner: f(self.inner),
-            info: self.info,
         }
     }
 
@@ -66,39 +108,62 @@ impl Builder {
     pub fn stack_size(self, size: usize) -> Self {
         self.map(|b| b.stack_size(size))
     }
-    pub fn priority(mut self, priority: Priority) -> Self {
-        self.info.priority = priority;
+    pub fn priority(self, _: Priority) -> Self {
+        // nothing to do
         self
     }
-    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Task, Error> {
-        Ok(Task {
-            thread: self
-                .inner
+    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Handle, Error> {
+        let state = Arc::new(State::default());
+        let thread = {
+            let state = state.clone();
+            self.inner
                 .spawn(move || {
-                    LOCAL.with(|this| {
-                        this.borrow_mut().replace(Local {
-                            info: self.info,
-                            interrupt: false,
-                        })
-                    });
+                    let enter = Enter::new(state.clone());
                     func();
+                    drop(enter);
                 })?
                 .thread()
-                .clone(),
-            info: self.info,
+                .clone()
+        };
+        Ok(Handle {
+            task: Task { thread },
+            state,
         })
     }
+}
+
+pub struct Enter {
+    _unused: [u8; 0],
+}
+
+impl Enter {
+    fn new(state: Arc<State>) -> Self {
+        LOCAL.with(|this| {
+            this.borrow_mut().replace(Local {
+                interrupt: false,
+                state,
+            })
+        });
+        Self { _unused: [] }
+    }
+}
+
+impl Drop for Enter {
+    fn drop(&mut self) {
+        LOCAL.with(|this| {
+            this.borrow_mut().as_ref().unwrap().state.finish();
+        });
+    }
+}
+
+/// Make the current thread a task.
+pub fn enter() -> Enter {
+    Enter::new(Arc::new(State::default()))
 }
 
 pub(crate) fn current() -> Task {
     Task {
         thread: thread::current(),
-        info: LOCAL.with(|this| {
-            let ref_ = this.borrow();
-            let local = ref_.as_ref().unwrap();
-            assert!(!local.interrupt);
-            local.info
-        }),
     }
 }
 

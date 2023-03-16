@@ -16,8 +16,12 @@ license = "MIT/Apache-2.0"
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "test"
+path = "src/main.rs"
+
 [features]
-default = ["backend-freertos"]
+default = ["test-freertos"]
 backend-std = ["std"]
 backend-freertos = ["freertos", "lazy_static/spin_no_std", "spin"]
 test-freertos = ["backend-freertos", "freertos-cargo-build"]
@@ -28,12 +32,13 @@ panic = []
 lazy_static = { version = "1.4.0", default-features = false }
 spin = { version = "0.5.2", optional = true }
 thiserror = "1.0.39"
+macro_rules_attribute = "0.1.3"
 
 [dependencies.freertos]
 package = "freertos-rust"
 path = "freertos-rust/freertos-rust"
 default-features = false
-features = ["sync", "time", "interrupt"]
+features = ["sync", "time", "interrupt", "hooks"]
 optional = true
 
 [build-dependencies]

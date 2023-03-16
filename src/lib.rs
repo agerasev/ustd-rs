@@ -1,15 +1,17 @@
 #![no_std]
 
-pub(crate) mod backend;
+#[cfg(feature = "backend-freertos")]
+pub use freertos;
 
+pub mod backend;
+
+pub mod context;
 pub mod error;
 pub mod io;
 pub mod sync;
 pub mod task;
 
-pub mod prelude {
-    pub use super::io::{print, println};
-}
+pub use io::{print, println};
 
-#[cfg(test)]
-mod tests;
+#[cfg(any(test, feature = "test-freertos"))]
+pub mod tests;

@@ -1,18 +1,40 @@
+extern crate alloc;
+
 use super::utils::IntoFreertos;
 use crate::{error::Error, task::Priority};
+use alloc::sync::Arc;
 use core::time::Duration;
+use freertos::FreeRtosTaskHandle;
 use lazy_static::lazy_static;
 use spin::Mutex as Spin;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
-pub(crate) struct TaskId(freertos::FreeRtosBaseType);
+pub(crate) struct TaskId(FreeRtosTaskHandle);
 
 #[derive(Clone, Debug)]
 pub(crate) struct Task(freertos::Task);
 
 impl Task {
     pub fn id(&self) -> TaskId {
-        TaskId(self.0.get_id().unwrap())
+        TaskId(self.0.raw_handle())
+    }
+}
+
+pub(crate) struct Handle {
+    task: freertos::Task,
+    done: Arc<freertos::Semaphore>,
+}
+
+impl Handle {
+    pub fn task(&self) -> Task {
+        Task(self.task.clone())
+    }
+    pub fn join(&self, timeout: Option<Duration>) -> bool {
+        let done = self.done.take(timeout.into_freertos()).is_ok();
+        if done {
+            self.done.give();
+        }
+        done
     }
 }
 
@@ -36,8 +58,17 @@ impl Builder {
         self.0.priority(freertos::TaskPriority(priority));
         self
     }
-    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Task, Error> {
-        self.0.start(|_task| func()).map(Task)
+    pub fn spawn<F: FnOnce() + Send + 'static>(self, func: F) -> Result<Handle, Error> {
+        let done = Arc::new(freertos::Semaphore::new_binary().unwrap());
+        self.0
+            .start({
+                let done = done.clone();
+                move |_task| {
+                    func();
+                    done.give();
+                }
+            })
+            .map(|task| Handle { task, done })
     }
 }
 

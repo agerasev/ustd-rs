@@ -1,6 +1,6 @@
 [package]
 name = "ustd"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 
@@ -14,7 +14,7 @@ keywords = ["std", "stdlib", "embedded"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["test-freertos"]
+default = ["backend-std"]
 backend-std = ["std"]
 backend-freertos = ["freertos", "lazy_static/spin_no_std"]
 test-freertos = ["backend-freertos", "freertos-cargo-build"]

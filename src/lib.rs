@@ -10,5 +10,5 @@ pub mod prelude {
     pub use super::task::{BlockingContext, Context};
 }
 
-#[cfg_attr(not(feature = "test-freertos"), cfg(test))]
-pub mod tests;
+#[cfg(all(not(feature = "test-freertos"), test))]
+mod tests;

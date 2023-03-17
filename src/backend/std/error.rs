@@ -1,10 +1,14 @@
 extern crate std;
 
 use std::io;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
+    Io(io::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
+        Self::Io(err)
+    }
 }

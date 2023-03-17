@@ -8,3 +8,4 @@ pub mod error;
 pub mod io;
 pub mod sync;
 pub mod task;
+pub mod test;

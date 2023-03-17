@@ -16,7 +16,8 @@ macro_rules! main {
 /// Run test in ustd environment.
 #[macro_export]
 macro_rules! test {
-    (fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
+    ($( #[$attr:meta] )* fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
+        $( #[$attr] )*
         #[test]
         fn $name() {
             let mut __cx = $crate::task::TaskContext::enter();
@@ -25,6 +26,15 @@ macro_rules! test {
                 $body
             }
             drop(__cx);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! tests_main {
+    ($( $test:path ),* $(,)?) => {
+        fn main() {
+            panic!("Use `cargo test`");
         }
     };
 }

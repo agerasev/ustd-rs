@@ -6,6 +6,19 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+
+char __ustd_io_buffer[0x100];
+
+size_t __ustd_io_buffer_size = sizeof(__ustd_io_buffer);
+
+void __ustd_print_buffer() {
+    printf("%s", __ustd_io_buffer);
+}
+
+void __ustd_exit() {
+	exit(0);
+}
+
 /*
  * Prototypes for the standard FreeRTOS application hook (callback) functions
  * implemented within this file.  See http://www.freertos.org/a00016.html .
@@ -129,13 +142,4 @@ the stack and so not exists after this function exits. */
 	Note that, as the array is necessarily of type StackType_t,
 	configMINIMAL_STACK_SIZE is specified in words, not bytes. */
 	*pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
-}
-
-
-char __ustd_io_buffer[0x100];
-
-size_t __ustd_io_buffer_size = sizeof(__ustd_io_buffer);
-
-void __ustd_print_buffer() {
-    printf("%s", __ustd_io_buffer);
 }

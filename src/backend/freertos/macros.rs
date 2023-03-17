@@ -11,23 +11,17 @@ macro_rules! main {
 
 #[macro_export]
 macro_rules! test {
-    (fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
+    ($( #[$attr:meta] )* fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
+        $( #[$attr] )*
         pub fn $name($cx: $cx_ty) $body
     };
 }
 
 #[macro_export]
-macro_rules! run_tests {
+macro_rules! tests_main {
     ($( $test:path ),* $(,)?) => {
-        let mut count = 0;
-        for (name, test) in [$( (stringify!($test), $test as fn(cx: &mut $crate::task::TaskContext)) ),*] {
-            $crate::task::spawn(move |cx| {
-                test(cx);
-                println!("test {} ... ok", name);
-            }).unwrap();
-            count += 1;
+        fn main() {
+            $crate::test::run_tests([$( (stringify!($test), $test as fn(&mut $crate::task::TaskContext)) ),*].into_iter());
         }
-        println!("running {} tests", count);
-        $crate::freertos::FreeRtosUtils::start_scheduler();
     };
 }

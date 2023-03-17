@@ -17,7 +17,7 @@ license = "MIT/Apache-2.0"
 default = ["backend-std"]
 backend-std = ["std"]
 backend-freertos = ["freertos", "lazy_static/spin_no_std"]
-test-freertos = ["backend-freertos", "freertos-cargo-build"]
+test-freertos = ["backend-freertos", "freertos/hooks", "freertos-cargo-build"]
 std = []
 panic = []
 
@@ -29,7 +29,7 @@ macro_rules_attribute = "0.1.3"
 package = "freertos-rust"
 path = "freertos-rust/freertos-rust"
 default-features = false
-features = ["sync", "time", "interrupt", "hooks"]
+features = ["sync", "time", "interrupt"]
 optional = true
 
 [build-dependencies]

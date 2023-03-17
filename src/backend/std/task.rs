@@ -160,6 +160,14 @@ pub struct InterruptContext {
     _p: PhantomData<*const ()>,
 }
 
+impl InterruptContext {
+    pub fn new() -> Self {
+        Self { _p: PhantomData }
+    }
+}
+
+impl Context for InterruptContext {}
+
 pub struct Builder {
     inner: thread::Builder,
 }

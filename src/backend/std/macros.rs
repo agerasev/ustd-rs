@@ -1,8 +1,9 @@
 /// Entry point of ustd program.
 #[macro_export]
 macro_rules! main {
-    (fn main($cx:ident: $cx_ty:ty) $body:block) => {
-        fn main() {
+    ($( #[$attr:meta] )* $vis:vis fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
+        $( #[$attr] )*
+        $vis fn $name() {
             let mut __cx = $crate::task::TaskContext::enter();
             let $cx: $cx_ty = &mut __cx;
             {
@@ -16,10 +17,10 @@ macro_rules! main {
 /// Run test in ustd environment.
 #[macro_export]
 macro_rules! test {
-    ($( #[$attr:meta] )* fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
+    ($( #[$attr:meta] )* $vis:vis fn $name:ident($cx:ident: $cx_ty:ty) $body:block) => {
         $( #[$attr] )*
         #[test]
-        fn $name() {
+        $vis fn $name() {
             let mut __cx = $crate::task::TaskContext::enter();
             let $cx: $cx_ty = &mut __cx;
             {

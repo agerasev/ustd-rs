@@ -84,6 +84,8 @@ impl InterruptContext {
     }
 }
 
+impl Context for InterruptContext {}
+
 pub struct Builder(freertos::TaskBuilder);
 
 impl Builder {

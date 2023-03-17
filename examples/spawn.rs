@@ -1,6 +1,6 @@
 use core::time::Duration;
 use macro_rules_attribute::apply;
-use ustd::prelude::*;
+use ustd::task::BlockingContext;
 
 #[apply(ustd::main)]
 fn main(cx: &mut ustd::task::TaskContext) {

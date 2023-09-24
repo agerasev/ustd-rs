@@ -1,15 +1,15 @@
 extern crate alloc;
 
-use super::{
-    sync::{SemaphoreBlockingContext, SemaphoreContext},
-    utils::IntoFreertos,
+use super::sync::{SemaphoreBlockingContext, SemaphoreContext};
+use crate::{
+    error::Error,
+    time::{duration_into_freertos, TimeContext},
 };
-use crate::error::Error;
 use alloc::sync::Arc;
 use core::{marker::PhantomData, time::Duration};
 use freertos::FreeRtosTaskHandle;
 
-pub trait Context: SemaphoreContext {}
+pub trait Context: SemaphoreContext + TimeContext {}
 
 pub trait BlockingContext: Context + SemaphoreBlockingContext {
     fn sleep(&mut self, duration: Option<Duration>);
@@ -46,7 +46,7 @@ impl Handle {
         Task(self.task.clone())
     }
     pub fn join<C: BlockingContext>(&self, _cx: &mut C, timeout: Option<Duration>) -> bool {
-        let done = self.done.take(timeout.into_freertos()).is_ok();
+        let done = self.done.take(duration_into_freertos(timeout)).is_ok();
         if done {
             self.done.give();
         }
@@ -64,7 +64,7 @@ impl Context for TaskContext {}
 
 impl BlockingContext for TaskContext {
     fn sleep(&mut self, duration: Option<Duration>) {
-        freertos::CurrentTask::delay(duration.into_freertos())
+        freertos::CurrentTask::delay(duration_into_freertos(duration))
     }
 }
 
@@ -106,10 +106,7 @@ impl Builder {
         self.0.priority(freertos::TaskPriority(priority));
         self
     }
-    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(
-        self,
-        func: F,
-    ) -> Result<Handle, Error> {
+    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(self, func: F) -> Result<Handle, Error> {
         let done = Arc::new(freertos::Semaphore::new_binary().unwrap());
         self.0
             .start({

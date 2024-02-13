@@ -2,8 +2,6 @@
 mod std;
 #[cfg(feature = "backend-std")]
 pub use self::std::*;
-#[cfg(feature = "backend-std")]
-pub use std::io::{print, println};
 
 #[cfg(feature = "backend-freertos")]
 mod freertos;

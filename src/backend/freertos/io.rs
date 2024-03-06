@@ -1,8 +1,8 @@
-use core::{ffi::c_char, slice::from_raw_parts_mut};
-use freertos::{self, Duration, Mutex};
-use lazy_static::lazy_static;
-
-pub use core::fmt::{Error, Write};
+use core::{
+    ffi::c_char,
+    fmt::{Error, Write},
+    slice::from_raw_parts_mut,
+};
 
 extern "C" {
     static __ustd_io_buffer_size: usize;
@@ -11,16 +11,9 @@ extern "C" {
     fn __ustd_print_buffer();
 }
 
-lazy_static! {
-    static ref STDOUT: Mutex<GlobalStdout> = Mutex::new(GlobalStdout::new()).unwrap();
-}
-
-struct GlobalStdout {}
+struct GlobalStdout;
 
 impl GlobalStdout {
-    fn new() -> Self {
-        Self {}
-    }
     fn buffer_len() -> usize {
         unsafe { __ustd_io_buffer_size }
     }
@@ -33,23 +26,8 @@ impl GlobalStdout {
 }
 
 pub struct Stdout {
-    _unused: [u8; 0],
-}
-
-type MutexGuard<'a, T> = freertos::MutexGuard<'a, T, freertos::MutexNormal>;
-
-pub struct StdoutLock<'a> {
-    guard: MutexGuard<'a, GlobalStdout>,
+    global: GlobalStdout,
     pos: usize,
-}
-
-impl Stdout {
-    pub fn lock(&self) -> StdoutLock<'static> {
-        StdoutLock {
-            guard: STDOUT.lock(Duration::infinite()).unwrap(),
-            pos: 0,
-        }
-    }
 }
 
 struct LfToCrLf<I: Iterator<Item = u8>> {
@@ -79,28 +57,28 @@ impl<I: Iterator<Item = u8>> Iterator for LfToCrLf<I> {
     }
 }
 
-impl<'a> StdoutLock<'a> {
+impl Stdout {
     unsafe fn push_byte_unchecked(&mut self, b: u8) {
-        *self.guard.buffer().get_unchecked_mut(self.pos) = b;
+        *self.global.buffer().get_unchecked_mut(self.pos) = b;
         self.pos += 1;
     }
     fn write_byte(&mut self, b: u8) {
         unsafe { self.push_byte_unchecked(b) };
         if self.pos >= GlobalStdout::buffer_len() {
-            self.guard.write_buffer();
+            self.global.write_buffer();
             self.pos = 0;
         }
     }
     fn flush(&mut self) {
         if self.pos > 0 {
             unsafe { self.push_byte_unchecked(0) };
-            self.guard.write_buffer();
+            self.global.write_buffer();
             self.pos = 0;
         }
     }
 }
 
-impl<'a> Write for StdoutLock<'a> {
+impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
         let src = LfToCrLf::new(s.as_bytes().iter().cloned());
         for b in src {
@@ -111,21 +89,18 @@ impl<'a> Write for StdoutLock<'a> {
     }
 }
 
-impl Write for Stdout {
-    fn write_str(&mut self, s: &str) -> Result<(), Error> {
-        self.lock().write_str(s)
-    }
-}
-
 pub fn stdout() -> Stdout {
-    Stdout { _unused: [] }
+    Stdout {
+        global: GlobalStdout,
+        pos: 0,
+    }
 }
 
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => {{
         use core::{write, fmt::Write};
-        write!($crate::io::stdout(), $($arg)*).unwrap();
+        let _ = write!($crate::io::stdout(), $($arg)*);
     }};
 }
 
@@ -136,8 +111,9 @@ macro_rules! println {
     }};
     ($($arg:tt)*) => {{
         use core::{write, fmt::Write};
-        let mut stdout = $crate::io::stdout().lock();
-        write!(stdout, $($arg)*).and_then(|()| write!(stdout, "\n")).unwrap();
+        let mut stdout = $crate::io::stdout();
+        let _ = write!(stdout, $($arg)*);
+        let _ = stdout.write_str("\n");
     }};
 }
 

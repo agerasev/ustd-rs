@@ -82,6 +82,10 @@ impl InterruptContext {
             _p: PhantomData,
         }
     }
+
+    pub fn should_yield(&self) -> bool {
+        self.inner.higher_priority_task_woken() != 0
+    }
 }
 
 impl Context for InterruptContext {}

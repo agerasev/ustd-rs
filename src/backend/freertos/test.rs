@@ -3,7 +3,6 @@ use crate::{
     task::{self, TaskContext},
 };
 use core::sync::atomic::{AtomicUsize, Ordering};
-use lazy_static::lazy_static;
 
 extern "C" {
     fn __ustd_exit() -> !;
@@ -13,9 +12,7 @@ fn exit() -> ! {
 }
 
 pub fn run_tests<I: Iterator<Item = (&'static str, fn(&mut TaskContext))>>(iter: I) {
-    lazy_static! {
-        static ref COUNTER: AtomicUsize = AtomicUsize::new(0);
-    }
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
     for (name, test) in iter {
         task::spawn(move |cx| {
             test(cx);

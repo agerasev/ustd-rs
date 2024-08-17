@@ -1,16 +1,16 @@
 extern crate alloc;
 
-use crate::{
-    sync::Semaphore,
-    task::{self, BlockingContext, TaskContext},
-    test,
-};
 use alloc::sync::Arc;
 use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::Duration,
 };
 use macro_rules_attribute::apply;
+use ustd::{
+    sync::Semaphore,
+    task::{self, BlockingContext, TaskContext},
+    test,
+};
 
 const SMALL_TIMEOUT: Option<Duration> = Some(Duration::from_millis(10));
 const BIG_TIMEOUT: Option<Duration> = Some(Duration::from_secs(1));
@@ -42,11 +42,11 @@ fn spawn(cx: &mut TaskContext) {
     assert!(task.join(cx, BIG_TIMEOUT));
 }
 
-#[cfg(feature = "test-freertos")]
+#[cfg(feature = "freertos")]
 #[apply(test)]
 fn priority(cx: &mut TaskContext) {
-    use crate::task::Priority;
     use alloc::vec::Vec;
+    use task::Priority;
 
     const COUNT: usize = 16;
 

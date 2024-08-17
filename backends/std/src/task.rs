@@ -184,7 +184,9 @@ impl Builder {
     }
 
     fn map<F: FnOnce(thread::Builder) -> thread::Builder>(self, f: F) -> Self {
-        Self { inner: f(self.inner) }
+        Self {
+            inner: f(self.inner),
+        }
     }
 
     pub fn name(self, name: &str) -> Self {
@@ -197,7 +199,10 @@ impl Builder {
         // nothing to do
         self
     }
-    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(self, func: F) -> Result<Handle, Error> {
+    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(
+        self,
+        func: F,
+    ) -> Result<Handle, Error> {
         let state = Arc::new(State::default());
         let thread = {
             let state = state.clone();

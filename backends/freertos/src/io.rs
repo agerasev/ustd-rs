@@ -116,6 +116,3 @@ macro_rules! println {
         let _ = stdout.write_str("\n");
     }};
 }
-
-pub use print;
-pub use println;

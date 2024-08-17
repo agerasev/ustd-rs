@@ -1,3 +1,5 @@
+#![no_std]
+
 mod alloc;
 mod macros;
 #[cfg(feature = "panic")]
@@ -11,3 +13,5 @@ pub mod test;
 pub mod time;
 
 pub use freertos;
+
+pub use error::Error;

@@ -1,8 +1,20 @@
-[package]
-name = "ustd"
-version = "0.2.0"
+[workspace]
+members = ["backends/freertos", "backends/std", "tests"]
+
+[workspace.package]
+version = "0.4.0"
 edition = "2021"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
+
+[workspace.dependencies]
+freertos = { package = "freertos-rust", path = "freertos-rust/freertos-rust" }
+macro_rules_attribute = "0.1.3"
+
+[package]
+name = "ustd"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 
 description = "Micro stdlib"
 documentation = "https://docs.rs/ustd"
@@ -14,20 +26,20 @@ keywords = ["std", "stdlib", "embedded"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["backend-std"]
-backend-std = ["std"]
-backend-freertos = ["freertos"]
-test-freertos = ["backend-freertos", "freertos/hooks", "freertos-cargo-build"]
-std = []
-panic = []
+std = ["backend-std"]
+freertos = ["backend-freertos"]
+panic = ["backend-freertos?/panic"]
 
-[dependencies]
-macro_rules_attribute = "0.1.3"
 
-[dependencies.freertos]
-package = "freertos-rust"
-path = "freertos-rust/freertos-rust"
+[dependencies.backend-std]
+package = "ustd-backend-std"
+path = "backends/std"
 optional = true
 
-[build-dependencies]
-freertos-cargo-build = { path = "freertos-rust/freertos-cargo-build", optional = true }
+[dependencies.backend-freertos]
+package = "ustd-backend-freertos"
+path = "backends/freertos"
+optional = true
+
+[dev-dependencies]
+macro_rules_attribute.workspace = true

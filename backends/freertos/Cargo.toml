@@ -1,0 +1,11 @@
+[package]
+name = "ustd-backend-freertos"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[features]
+panic = []
+
+[dependencies]
+freertos.workspace = true

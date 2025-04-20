@@ -76,7 +76,7 @@ pub struct InterruptContext {
 
 impl InterruptContext {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub unsafe fn new() -> Self {
         Self {
             inner: freertos::InterruptContext::new(),
             _p: PhantomData,
@@ -110,7 +110,10 @@ impl Builder {
         self.0.priority(freertos::TaskPriority(priority));
         self
     }
-    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(self, func: F) -> Result<Handle, Error> {
+    pub fn spawn<F: FnOnce(&mut TaskContext) + Send + 'static>(
+        self,
+        func: F,
+    ) -> Result<Handle, Error> {
         let done = Arc::new(freertos::Semaphore::new_binary().unwrap());
         self.0
             .start({

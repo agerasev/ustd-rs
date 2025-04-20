@@ -161,7 +161,7 @@ pub struct InterruptContext {
 }
 
 impl InterruptContext {
-    pub fn new() -> Self {
+    pub unsafe fn new() -> Self {
         Self { _p: PhantomData }
     }
     pub fn should_yield(&self) -> bool {

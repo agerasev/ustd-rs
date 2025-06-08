@@ -6,12 +6,9 @@ authors.workspace = true
 
 [features]
 std = ["ustd/std"]
-freertos = ["ustd/freertos", "dep:freertos", "freertos-cargo-build"]
+freertos = ["ustd/freertos", "dep:freertos"]
 
 [dependencies]
 ustd = { path = ".." }
 freertos = { workspace = true, features = ["hooks"], optional = true }
 macro_rules_attribute.workspace = true
-
-[build-dependencies]
-freertos-cargo-build = { path = "../freertos-rust/freertos-cargo-build", optional = true }

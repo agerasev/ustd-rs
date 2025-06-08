@@ -1,6 +1,8 @@
 extern crate std;
 
-pub use std::{
-    io::{stdout, Stdout, StdoutLock},
-    print, println,
-};
+#[repr(transparent)]
+pub struct Stdout(pub std::io::Stdout);
+
+pub fn stdout() -> Stdout {
+    Stdout(std::io::stdout())
+}

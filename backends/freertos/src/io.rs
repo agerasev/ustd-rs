@@ -1,8 +1,4 @@
-use core::{
-    ffi::c_char,
-    fmt::{Error, Write},
-    slice::from_raw_parts_mut,
-};
+use core::{ffi::c_char, slice::from_raw_parts_mut};
 
 extern "C" {
     static __ustd_io_buffer_size: usize;
@@ -30,46 +26,19 @@ pub struct Stdout {
     pos: usize,
 }
 
-struct LfToCrLf<I: Iterator<Item = u8>> {
-    iter: I,
-    lf: bool,
-}
-
-impl<I: Iterator<Item = u8>> LfToCrLf<I> {
-    fn new(iter: I) -> Self {
-        Self { iter, lf: false }
-    }
-}
-
-impl<I: Iterator<Item = u8>> Iterator for LfToCrLf<I> {
-    type Item = u8;
-    fn next(&mut self) -> Option<u8> {
-        if self.lf {
-            self.lf = false;
-            return Some(b'\n');
-        }
-        let b = self.iter.next()?;
-        if b == b'\n' {
-            self.lf = true;
-            return Some(b'\r');
-        }
-        Some(b)
-    }
-}
-
 impl Stdout {
     unsafe fn push_byte_unchecked(&mut self, b: u8) {
         *self.global.buffer().get_unchecked_mut(self.pos) = b;
         self.pos += 1;
     }
-    fn write_byte(&mut self, b: u8) {
+    pub(crate) fn write_byte(&mut self, b: u8) {
         unsafe { self.push_byte_unchecked(b) };
         if self.pos >= GlobalStdout::buffer_len() {
             self.global.write_buffer();
             self.pos = 0;
         }
     }
-    fn flush(&mut self) {
+    pub(crate) fn flush(&mut self) {
         if self.pos > 0 {
             unsafe { self.push_byte_unchecked(0) };
             self.global.write_buffer();
@@ -78,41 +47,9 @@ impl Stdout {
     }
 }
 
-impl Write for Stdout {
-    fn write_str(&mut self, s: &str) -> Result<(), Error> {
-        let src = LfToCrLf::new(s.as_bytes().iter().cloned());
-        for b in src {
-            self.write_byte(b);
-        }
-        self.flush();
-        Ok(())
-    }
-}
-
 pub fn stdout() -> Stdout {
     Stdout {
         global: GlobalStdout,
         pos: 0,
     }
-}
-
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => {{
-        use core::{write, fmt::Write};
-        let _ = write!($crate::io::stdout(), $($arg)*);
-    }};
-}
-
-#[macro_export]
-macro_rules! println {
-    () => {{
-        $crate::print!("\n");
-    }};
-    ($($arg:tt)*) => {{
-        use core::{write, fmt::Write};
-        let mut stdout = $crate::io::stdout();
-        let _ = write!(stdout, $($arg)*);
-        let _ = stdout.write_str("\n");
-    }};
 }

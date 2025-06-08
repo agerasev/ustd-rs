@@ -6,6 +6,7 @@ mod macros;
 mod panic;
 
 pub mod error;
+pub mod fmt;
 pub mod io;
 pub mod sync;
 pub mod task;

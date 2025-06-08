@@ -3,3 +3,6 @@ name = "ustd-backend-std"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+
+[dependencies]
+ufmt = { workspace = true, features = ["std"] }

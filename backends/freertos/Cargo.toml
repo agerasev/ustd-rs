@@ -9,3 +9,4 @@ panic = []
 
 [dependencies]
 freertos.workspace = true
+ufmt.workspace = true

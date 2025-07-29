@@ -2,7 +2,7 @@ use super::task::{InterruptContext, TaskContext};
 use crate::{
     error::Error,
     task::{BlockingContext, Context},
-    time::duration_into_freertos,
+    time::{duration_into_freertos, TimerContext},
 };
 use core::time::Duration;
 use freertos::Duration as FreeRtosDuration;
@@ -23,6 +23,18 @@ mod sealed {
 pub(crate) use sealed::{SemaphoreBlockingContext, SemaphoreContext};
 
 impl SemaphoreContext for TaskContext {
+    fn semaphore_try_give(&mut self, sem: &freertos::Semaphore) -> bool {
+        sem.give()
+    }
+    fn semaphore_try_take(&mut self, sem: &freertos::Semaphore) -> bool {
+        match sem.take(FreeRtosDuration::zero()) {
+            Ok(()) => true,
+            Err(Error::Timeout) => false,
+            Err(_) => unreachable!(),
+        }
+    }
+}
+impl SemaphoreContext for TimerContext<'_> {
     fn semaphore_try_give(&mut self, sem: &freertos::Semaphore) -> bool {
         sem.give()
     }

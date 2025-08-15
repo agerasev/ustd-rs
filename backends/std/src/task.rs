@@ -107,7 +107,7 @@ impl Handle {
 }
 
 thread_local! {
-    static HAS_CONTEXT: Cell<bool> = Cell::new(false);
+    static HAS_CONTEXT: Cell<bool> = const { Cell::new(false) };
 }
 
 impl TaskContext {
@@ -161,6 +161,9 @@ pub struct InterruptContext {
 }
 
 impl InterruptContext {
+    /// # Safety
+    /// It is always safe to construct [`InterruptContext`] using `std` backend.
+    /// The method marked as `unsafe` for compatibility with `freertos` backend.
     pub unsafe fn new() -> Self {
         Self { _p: PhantomData }
     }

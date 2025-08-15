@@ -26,6 +26,7 @@ keywords = ["std", "stdlib", "embedded"]
 license = "MIT/Apache-2.0"
 
 [features]
+default = ["std"]
 std = ["backend-std"]
 freertos = ["backend-freertos"]
 panic = ["backend-freertos?/panic"]

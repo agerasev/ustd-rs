@@ -1,6 +1,6 @@
 #![no_std]
 
-#[cfg(not(feature = "freertos"))]
+#[cfg(feature = "std")]
 pub use backend_std::*;
 
 #[cfg(feature = "freertos")]

@@ -1,9 +1,10 @@
 extern crate std;
 
 use crate::error::Error;
-use core::{cell::Cell, marker::PhantomData, time::Duration};
+use core::{marker::PhantomData, time::Duration};
 use std::{
-    sync::{Arc, Condvar, Mutex},
+    cell::RefCell,
+    sync::{Arc, Condvar, Mutex, Weak},
     thread::{self, Thread, ThreadId},
     thread_local,
     time::Instant,
@@ -75,7 +76,7 @@ impl From<Thread> for Task {
 /// Task handle.
 pub struct Handle {
     task: Task,
-    state: Arc<State>,
+    state: Weak<State>,
 }
 
 /// Context inside task.
@@ -102,17 +103,27 @@ impl Handle {
     }
     /// Wait for task to finish.
     pub fn join<C: BlockingContext>(&self, _cx: &mut C, timeout: Option<Duration>) -> bool {
-        self.state.wait_finished(timeout)
+        if let Some(state) = self.state.upgrade() {
+            state.wait_finished(timeout)
+        } else {
+            true
+        }
     }
 }
 
 thread_local! {
-    static HAS_CONTEXT: Cell<bool> = const { Cell::new(false) };
+    static STATE: RefCell<Weak<State>> = const { RefCell::new(Weak::new()) };
+}
+
+fn init_current_state(state: Arc<State>) {
+    STATE.with_borrow_mut(move |weak| {
+        assert_eq!(weak.strong_count(), 0);
+        *weak = Arc::downgrade(&state);
+    });
 }
 
 impl TaskContext {
     fn new(task: Task, state: Arc<State>) -> Self {
-        HAS_CONTEXT.with(|x| assert!(!x.replace(true)));
         Self {
             task,
             state,
@@ -123,17 +134,20 @@ impl TaskContext {
     ///
     /// Panics if context for the task already exists.
     pub fn enter() -> Self {
-        Self::new(thread::current().into(), Arc::new(State::default()))
+        let state = Arc::new(State::default());
+        init_current_state(state.clone());
+        Self::new(thread::current().into(), state)
+    }
+    /// Get already created context for current task.
+    ///
+    /// Panics if context hasn't created or already dropped.
+    pub fn current() -> Self {
+        let state = STATE.with_borrow(|weak| weak.upgrade().expect("Task has no active context"));
+        Self::new(thread::current().into(), state)
     }
 
     pub fn task(&self) -> Task {
         self.task.clone()
-    }
-}
-
-impl Drop for TaskContext {
-    fn drop(&mut self) {
-        HAS_CONTEXT.with(|x| assert!(x.replace(false)));
     }
 }
 
@@ -211,6 +225,7 @@ impl Builder {
             let state = state.clone();
             self.inner
                 .spawn(move || {
+                    init_current_state(state.clone());
                     let mut cx = TaskContext::new(thread::current().into(), state);
                     func(&mut cx);
                     cx.state.finish();
@@ -220,7 +235,7 @@ impl Builder {
         };
         Ok(Handle {
             task: Task { thread },
-            state,
+            state: Arc::downgrade(&state),
         })
     }
 }

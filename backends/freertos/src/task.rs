@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use super::sync::{SemaphoreBlockingContext, SemaphoreContext};
+use super::sync::{SyncBlockingContext, SyncContext};
 use crate::{
     error::Error,
     time::{duration_into_freertos, TimeContext},
@@ -9,9 +9,9 @@ use alloc::sync::Arc;
 use core::{marker::PhantomData, time::Duration};
 use freertos::FreeRtosTaskHandle;
 
-pub trait Context: SemaphoreContext + TimeContext {}
+pub trait Context: SyncContext + TimeContext {}
 
-pub trait BlockingContext: Context + SemaphoreBlockingContext {
+pub trait BlockingContext: Context + SyncBlockingContext {
     fn sleep(&mut self, duration: Option<Duration>);
 }
 

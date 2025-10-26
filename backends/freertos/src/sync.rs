@@ -73,6 +73,9 @@ impl Semaphore {
     pub fn new() -> Result<Self, Error> {
         freertos::Semaphore::new_binary().map(Self)
     }
+    pub unsafe fn inner(&self) -> &freertos::Semaphore {
+        &self.0
+    }
 
     pub fn try_give<C: Context>(&self, cx: &mut C) -> bool {
         cx.semaphore_try_give(&self.0)
@@ -91,6 +94,9 @@ pub struct Mutex<T>(freertos::Mutex<T>);
 impl<T> Mutex<T> {
     pub fn new(value: T) -> Result<Self, Error> {
         freertos::Mutex::new(value).map(Self)
+    }
+    pub unsafe fn inner(&self) -> &freertos::Mutex<T> {
+        &self.0
     }
 
     pub fn try_lock(&self, _cx: &mut TaskContext) -> Result<Option<MutexGuard<'_, T>>, Error> {

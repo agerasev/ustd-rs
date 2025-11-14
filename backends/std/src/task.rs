@@ -140,10 +140,10 @@ impl TaskContext {
     }
     /// Get already created context for current task.
     ///
-    /// Panics if context hasn't created or already dropped.
-    pub fn current() -> Self {
-        let state = STATE.with_borrow(|weak| weak.upgrade().expect("Task has no active context"));
-        Self::new(thread::current().into(), state)
+    /// Returns `None` if context hasn't created or already dropped.
+    pub fn current() -> Option<Self> {
+        let state = STATE.with_borrow(|weak| weak.upgrade())?;
+        Some(Self::new(thread::current().into(), state))
     }
 
     pub fn task(&self) -> Task {

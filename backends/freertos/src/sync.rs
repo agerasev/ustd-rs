@@ -73,9 +73,6 @@ impl Semaphore {
     pub fn new() -> Result<Self, Error> {
         freertos::Semaphore::new_binary().map(Self)
     }
-    pub unsafe fn inner(&self) -> &freertos::Semaphore {
-        &self.0
-    }
 
     pub fn try_give<C: Context>(&self, cx: &mut C) -> bool {
         cx.semaphore_try_give(&self.0)

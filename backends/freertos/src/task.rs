@@ -36,7 +36,6 @@ pub struct Handle {
 
 pub struct TaskContext {
     task: freertos::Task,
-    done: Arc<freertos::Semaphore>,
     /// To ensure `!Sync + !Send`
     _p: PhantomData<*const ()>,
 }
@@ -55,6 +54,13 @@ impl Handle {
 }
 
 impl TaskContext {
+    pub fn current() -> Option<TaskContext> {
+        Some(TaskContext {
+            task: freertos::Task::current().ok()?,
+            _p: PhantomData,
+        })
+    }
+
     pub fn task(&mut self) -> Task {
         Task(self.task.clone())
     }
@@ -121,11 +127,10 @@ impl Builder {
                 move |task| {
                     let mut cx = TaskContext {
                         task,
-                        done,
                         _p: PhantomData,
                     };
                     func(&mut cx);
-                    cx.done.give();
+                    done.give();
                 }
             })
             .map(|task| Handle { task, done })

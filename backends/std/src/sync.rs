@@ -31,14 +31,18 @@ impl Semaphore {
         Ok(Self::with_value(false))
     }
 
-    /// Try to release semaphore.
-    ///
-    /// Returns `true` on success, `false` when already released.
-    pub fn try_give<C: Context>(&self, _cx: &mut C) -> bool {
+    fn try_give_inner(&self) -> bool {
         let mut guard = self.value.lock().unwrap();
         let prev = replace(&mut *guard, true);
         self.condvar.notify_one();
         !prev
+    }
+
+    /// Try to release semaphore.
+    ///
+    /// Returns `true` on success, `false` when already released.
+    pub fn try_give<C: Context>(&self, _cx: &mut C) -> bool {
+        self.try_give_inner()
     }
 
     /// Try to acquire semaphore.
@@ -142,6 +146,6 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        assert!(self.sem.try_give(&mut TaskContext::current()));
+        assert!(self.sem.try_give(&mut TaskContext::current().unwrap()));
     }
 }

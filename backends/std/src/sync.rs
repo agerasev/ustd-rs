@@ -96,7 +96,7 @@ impl<T> Mutex<T> {
         if self.sem.try_take(cx) {
             match self.value.try_lock() {
                 Ok(guard) => Ok(Some(MutexGuard {
-                    guard,
+                    guard: Some(guard),
                     sem: &self.sem,
                 })),
                 Err(TryLockError::WouldBlock) => unreachable!(),
@@ -114,7 +114,7 @@ impl<T> Mutex<T> {
         if self.sem.take(cx, timeout) {
             match self.value.try_lock() {
                 Ok(guard) => Ok(MutexGuard {
-                    guard,
+                    guard: Some(guard),
                     sem: &self.sem,
                 }),
                 Err(TryLockError::WouldBlock) => unreachable!(),
@@ -127,25 +127,26 @@ impl<T> Mutex<T> {
 }
 
 pub struct MutexGuard<'a, T> {
-    guard: StdMutexGuard<'a, T>,
+    guard: Option<StdMutexGuard<'a, T>>,
     sem: &'a Semaphore,
 }
 
 impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.guard.deref()
+        self.guard.as_ref().unwrap().deref()
     }
 }
 
 impl<T> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.guard.deref_mut()
+        self.guard.as_mut().unwrap().deref_mut()
     }
 }
 
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
+        drop(self.guard.take().unwrap());
         assert!(self.sem.try_give(&mut TaskContext::current().unwrap()));
     }
 }
